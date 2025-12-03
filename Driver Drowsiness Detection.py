@@ -12,6 +12,70 @@ import numpy as np
 from EAR import eye_aspect_ratio
 from MAR import mouth_aspect_ratio
 from HeadPose import getHeadTiltAndCoords
+import smtplib
+import pywhatkit
+import datetime
+import pyautogui
+import keyboard
+import geocoder
+
+def get_device_location():
+    """Return a Google Maps link using network-based geolocation."""
+    try:
+        g = geocoder.ip('me')
+        if g.ok and g.latlng:
+            lat, lng = g.latlng
+            return f"https://www.google.com/maps?q={lat},{lng}"
+        return "Location unavailable"
+    except Exception:
+        return "Location error"
+
+EYES_CLOSED_START = None
+ALERT_SENT = False
+EMERGENCY_THRESHOLD = 10
+
+
+def send_whatsapp_alert():
+    """Send WhatsApp alert to multiple emergency contacts."""
+    global ALERT_SENT
+
+    location = get_device_location()
+    msg = (
+        "🚨 EMERGENCY ALERT 🚨\n"
+        "The driver has been drowsy for more than 10 seconds.\n"
+        "Immediate help is required!\n\n"
+        f"📍 Driver Location:\n{location}"
+    )
+
+    contacts = [
+        "+918999318374",  # Contact 1
+        "+919699355573",  # Contact 2
+        "+918275270293",  # Relative
+    ]
+
+    for number in contacts:
+        try:
+            print(f"[INFO] Sending WhatsApp alert to {number}...")
+            pywhatkit.sendwhatmsg_instantly(
+                number,
+                msg,
+                wait_time=15,
+                tab_close=False
+            )
+
+            # Give WhatsApp Web time to focus and ensure chat is active
+            time.sleep(8)
+            pyautogui.click(400, 400)  # adjust coordinates if needed
+            time.sleep(1)
+            pyautogui.press("enter")
+            time.sleep(1)
+            pyautogui.press("enter")
+
+            print(f"[SUCCESS] WhatsApp alert sent to {number}!")
+        except Exception as e:
+            print(f"[ERROR] Failed to send alert to {number}: {e}")
+
+    ALERT_SENT = True
 
 # initialize dlib's face detector (HOG-based) and then create the
 # facial landmark predictor
@@ -31,9 +95,13 @@ if not cap.isOpened():
     cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
 time.sleep(1.0)
 
-# 400x225 to 1024x576
-frame_width = 1024
-frame_height = 576
+# Desired display size (increase if you want a bigger window)
+frame_width = 1280
+frame_height = 720
+
+# Create a resizable window with the desired size
+cv2.namedWindow("Frame", cv2.WINDOW_NORMAL)
+cv2.resizeWindow("Frame", frame_width, frame_height)
 
 # loop over the frames from the video stream
 # 2D image points. If you change the image, you need to change vector
@@ -65,7 +133,7 @@ while True:
     ret, frame = cap.read()
     if not ret or frame is None:
         continue
-    frame = imutils.resize(frame, width=1024, height=576)
+    frame = imutils.resize(frame, width=frame_width, height=frame_height)
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     gray = np.require(gray, dtype=np.uint8, requirements=['C'])
     size = gray.shape
@@ -118,8 +186,21 @@ while True:
             COUNTER += 1
             eyes_status = "Closed"
             eyes_color = (0, 0, 255)
+
+            if EYES_CLOSED_START is None:
+                EYES_CLOSED_START = time.time()
+            else:
+                closed_duration = time.time() - EYES_CLOSED_START
+                cv2.putText(frame, f"Closed for: {int(closed_duration)} sec",
+                            (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                            (0, 0, 255), 2)
+
+                if closed_duration >= EMERGENCY_THRESHOLD and not ALERT_SENT:
+                    send_whatsapp_alert()
         else:
             COUNTER = 0
+            EYES_CLOSED_START = None
+            ALERT_SENT = False
 
         # show EAR numeric and status
         cv2.putText(frame, "EAR: {:.2f}".format(ear), (170, 20),
