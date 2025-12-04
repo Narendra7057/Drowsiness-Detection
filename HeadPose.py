@@ -63,8 +63,8 @@ def getHeadTiltAndCoords(size, image_points, frame_height):
     rotation_matrix, _ = cv2.Rodrigues(rotation_vector)
 
     #calculate head tilt angle in degrees
-    head_tilt_degree = abs(
-        [-180] - np.rad2deg([rotationMatrixToEulerAngles(rotation_matrix)[0]]))
+    head_tilt_degree = np.array([abs(
+        -180 - np.rad2deg(rotationMatrixToEulerAngles(rotation_matrix)[0]))])
 
     #calculate starting and ending points for the two lines for illustration
     starting_point = (int(image_points[0][0]), int(image_points[0][1]))
